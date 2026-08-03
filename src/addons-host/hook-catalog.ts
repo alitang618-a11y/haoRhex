@@ -426,6 +426,8 @@ const actionHookCatalog: readonly AddonExtensionPointCatalogEntry[] = [
   // 上传
   { name: "upload.file.before", kind: "action", category: "upload", scope: "service", summary: "文件上传落盘前执行副作用或拦截逻辑（payload: { uploaderId, filename, mime, size }）。", returns: "void" },
   { name: "upload.file.after", kind: "action", category: "upload", scope: "service", summary: "文件上传完成后执行副作用逻辑（payload 含 fileId/url）。", returns: "void" },
+  { name: "postAttachment.download.before", kind: "action", category: "attachment", scope: "service", summary: "付费附件下载前触发；抛出异常可阻断本次下载（payload: { attachmentId, postId, viewerId }）。", returns: "void" },
+  { name: "postAttachment.download.success", kind: "action", category: "attachment", scope: "service", summary: "付费附件文件流完整传输给客户端后触发，用于发放活跃度/记录下载；客户端提前中断下载不会触发。", returns: "void" },
   // addon 生命周期
   { name: "addon.installed.before", kind: "action", category: "system", scope: "service", summary: "插件安装、升级或覆盖写入前执行副作用或拦截逻辑。", returns: "void" },
   { name: "addon.installed.after", kind: "action", category: "system", scope: "service", summary: "插件安装完成后执行副作用逻辑（payload: { addonId, version }）。", returns: "void" },
