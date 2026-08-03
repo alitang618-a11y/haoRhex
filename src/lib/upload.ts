@@ -728,11 +728,59 @@ function buildContentDisposition(fileName: string) {
   return `attachment; filename="${asciiFallbackFileName}"; filename*=UTF-8''${encodedFileName}`
 }
 
+// ============================================================
+// 新增：完整传输感知的流包装
+// 目的：只有当源文件流被完整读到 EOF（即已完整交给底层 HTTP 层发送）才触发 onDownloadComplete，
+//       修复"客户端中断下载/连接异常关闭，仍然计入下载次数、仍然发放活跃度"的问题。
+// 风险点：
+//   1) onDownloadComplete 在最后一块数据之后、controller.close() 之前 await 执行，
+//      会给流的收尾增加一次数据库自增操作的等待（通常个位数毫秒，可忽略）。
+//   2) 这里判断的是"服务端把源文件读到 EOF"，并不是"客户端网络层已确认收到全部字节"——
+//      这是 HTTP 流式响应在服务端能拿到的最强完整性信号，理论上仍存在极小概率的边界差异
+//      （例如最后一个 TCP 包在传输中丢失），但已经比"响应构造后立即计数"精确得多。
+//   3) 客户端主动中断（用户取消下载/关闭标签页/断网）会触发 ReadableStream.cancel()，
+//      该分支明确跳过 onDownloadComplete，不计数、不发活跃度。
+// ============================================================
+function createCompletionAwareStream(
+  source: ReadableStream<Uint8Array>,
+  onDownloadComplete: () => Promise<void> | void,
+): ReadableStream<Uint8Array> {
+  const reader = source.getReader()
+  let completed = false
+
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      const { done, value } = await reader.read()
+
+      if (done) {
+        if (!completed) {
+          completed = true
+          try {
+            await onDownloadComplete()
+          } catch (error) {
+            console.error("[upload] onDownloadComplete 回调执行失败", error)
+          }
+        }
+        controller.close()
+        return
+      }
+
+      controller.enqueue(value)
+    },
+    async cancel(reason) {
+      // 客户端提前中断连接：不触发 onDownloadComplete
+      await reader.cancel(reason)
+    },
+  })
+}
+
 export async function createDownloadResponseFromStoredUpload(params: {
   storagePath: string
   mimeType?: string | null
   fileSize?: number | null
   fileName: string
+  // 新增：可选的"完整下载完成"回调，仅在流被完整读完时触发一次
+  onDownloadComplete?: () => Promise<void> | void
 }) {
   const storedFile = await readStoredUploadFile({
     storagePath: params.storagePath,
@@ -742,7 +790,11 @@ export async function createDownloadResponseFromStoredUpload(params: {
     ? params.fileSize
     : storedFile.fileSize
 
-  return new Response(storedFile.body, {
+  const responseBody = params.onDownloadComplete
+    ? createCompletionAwareStream(storedFile.body, params.onDownloadComplete)
+    : storedFile.body
+
+  return new Response(responseBody, {
     headers: {
       "Content-Type": params.mimeType?.trim() || "application/octet-stream",
       ...(typeof contentLength === "number" ? { "Content-Length": String(contentLength) } : {}),
