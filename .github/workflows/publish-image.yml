@@ -38,6 +38,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
+          # 最终镜像：ghcr.io/alitang618-a11y/rhex
           images: ghcr.io/${{ github.repository_owner }}/rhex
           tags: |
             type=raw,value=latest,enable=${{ github.ref_name == 'main' }}
