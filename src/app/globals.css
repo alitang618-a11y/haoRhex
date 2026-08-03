@@ -1601,6 +1601,7 @@
   }
   html {
     @apply font-sans;
+    scrollbar-gutter: stable;
   }
   button,
   a[data-slot='dropdown-menu-item'],
