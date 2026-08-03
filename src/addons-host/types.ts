@@ -413,8 +413,11 @@ export const ADDON_ACTION_HOOK_NAMES = [
   // 积分
   "points.change.after",
   // 上传
-  "upload.file.before",
+"upload.file.before",
   "upload.file.after",
+  // 附件下载（activity_download 等插件监听这里发放/校验活跃度）
+  "postAttachment.download.before",
+  "postAttachment.download.success",
   // addon 生命周期
   "addon.installed.before",
   "addon.installed.after",
@@ -2023,6 +2026,7 @@ export interface AddonActionHookPayloadMap {
     reason: string
   }
   // ─── 上传 ───
+  // ─── 上传 ───
   "upload.file.before": {
     uploaderId: string
     filename: string
@@ -2036,6 +2040,21 @@ export interface AddonActionHookPayloadMap {
     mime: string
     size: number
     url?: string
+  }
+  // ─── 附件下载 ───
+  // before：下载前触发，抛出异常会阻断本次下载（例如 activity_download 插件校验活跃度余额不足时可以抛错）。
+  "postAttachment.download.before": {
+    attachmentId: string
+    postId: string
+    viewerId?: string | null
+  }
+  // success：仅当文件流被完整读到 EOF（即完整传输给客户端）才会触发，
+  // 客户端中途取消下载/断网不会触发这个钩子。
+  "postAttachment.download.success": {
+    attachmentId: string
+    postId: string
+    viewerId?: string | null
+    downloadCount?: number
   }
   // ─── addon 生命周期 ───
   "addon.installed.before": {
