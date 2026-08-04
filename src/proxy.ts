@@ -19,14 +19,13 @@ const PATH_HOME_FEED_SORTS: Record<string, HomeFeedSort> = {
   "/hot": "hot",
 }
 
-// 修复：去掉 no-cache 和 max-age=0，避免强制全量重绘导致闪烁
-const FORUM_DOCUMENT_CACHE_CONTROL = "private, max-age=30, must-revalidate"
+// 修复缓存头：去掉强制不缓存，保留短时缓存+更新校验
+const FORUM_DOCUMENT_CACHE_CONTROL = "private, max-age=60, must-revalidate"
 
 function isDocumentRequest(request: NextRequest) {
   if (request.method !== "GET" && request.method !== "HEAD") {
     return false
   }
-
   return request.headers.get("sec-fetch-dest") === "document"
     || request.headers.get("accept")?.includes("text/html") === true
 }
@@ -53,23 +52,14 @@ function getAnonymousPublicPageCacheTarget(request: NextRequest) {
 function rewriteToAnonymousPublicPageCache(request: NextRequest, target: string) {
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set(PUBLIC_PAGE_CACHE_TARGET_HEADER, target)
-
   const url = request.nextUrl.clone()
   url.pathname = "/api/internal/public-page-cache"
   url.search = ""
-
-  return NextResponse.rewrite(url, {
-    request: {
-      headers: requestHeaders,
-    },
-  })
+  return NextResponse.rewrite(url, { request: { headers: requestHeaders } })
 }
 
 function redirectLegacyHomeFeedPageQuery(request: NextRequest) {
-  if (request.method !== "GET" && request.method !== "HEAD") {
-    return null
-  }
-
+  if (request.method !== "GET" && request.method !== "HEAD") return null
   const rootPath = request.nextUrl.pathname === "/"
   const rawSort = request.nextUrl.searchParams.get("sort")
   const rawPage = request.nextUrl.searchParams.get("page")
@@ -77,39 +67,25 @@ function redirectLegacyHomeFeedPageQuery(request: NextRequest) {
     ?? (rootPath && (rawSort !== null || rawPage !== null)
       ? normalizeHomeFeedSort(rawSort ?? undefined)
       : null)
-  if (!sort || (rawPage === null && rawSort === null)) {
-    return null
-  }
-
+  if (!sort || (rawPage === null && rawSort === null)) return null
   const url = request.nextUrl.clone()
   url.pathname = buildHomeFeedHref(sort, parseHomeFeedPage(rawPage ?? undefined))
   url.search = ""
-
   return NextResponse.redirect(url)
 }
 
 function nextWithRequestContext(request: NextRequest) {
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set(RHEX_PATHNAME_HEADER, request.nextUrl.pathname)
-
-  const response = NextResponse.next({
-    request: {
-      headers: requestHeaders,
-    },
-  })
-
+  const response = NextResponse.next({ request: { headers: requestHeaders } })
   if (isForumContentPath(request.nextUrl.pathname) && isDocumentRequest(request)) {
     response.headers.set("Cache-Control", FORUM_DOCUMENT_CACHE_CONTROL)
   }
-
   return response
 }
 
 async function isForumBrowseProtectedPath(pathname: string) {
-  if (!isForumContentPath(pathname)) {
-    return false
-  }
-
+  if (!isForumContentPath(pathname)) return false
   try {
     const settings = await getServerSiteSettings()
     return settings.forumRequireLoginToBrowse
@@ -120,33 +96,26 @@ async function isForumBrowseProtectedPath(pathname: string) {
 
 export async function proxy(request: NextRequest) {
   const legacyHomeFeedRedirect = redirectLegacyHomeFeedPageQuery(request)
-  if (legacyHomeFeedRedirect) {
-    return legacyHomeFeedRedirect
-  }
+  if (legacyHomeFeedRedirect) return legacyHomeFeedRedirect
+
+  // ===== 关键修复：跳过匿名缓存重写，避免额外请求时序导致闪烁 =====
+  // const cacheTarget = getAnonymousPublicPageCacheTarget(request)
+  // if (cacheTarget) return rewriteToAnonymousPublicPageCache(request, cacheTarget)
+  // ============================================================
 
   const token = request.cookies.get(getSessionCookieName())?.value
   const protectedPath = isProtectedPath(request.nextUrl.pathname)
     || await isForumBrowseProtectedPath(request.nextUrl.pathname)
 
-  if (!protectedPath) {
-    return nextWithRequestContext(request)
-  }
-
-  if (!token) {
-    return buildUnauthorizedResponse(request)
-  }
-
+  if (!protectedPath) return nextWithRequestContext(request)
+  if (!token) return buildUnauthorizedResponse(request)
   const session = await getSessionFromRequest(request)
-  if (session) {
-    return nextWithRequestContext(request)
-  }
-
+  if (session) return nextWithRequestContext(request)
   if (protectedPath) {
     const response = buildUnauthorizedResponse(request)
     response.cookies.set(getSessionCookieName(), "", getSessionClearedCookieOptions({ request }))
     return response
   }
-
   const response = nextWithRequestContext(request)
   response.cookies.set(getSessionCookieName(), "", getSessionClearedCookieOptions({ request }))
   return response
