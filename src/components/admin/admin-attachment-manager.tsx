@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { ExternalLink, FileArchive, Filter, Loader2, RefreshCw, Trash2 } from "lucide-react"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 
 import {
   AdminFilterActions,
@@ -101,6 +101,16 @@ export function AdminAttachmentManager({ data }: AdminAttachmentManagerProps) {
     referenceStatus: data.filters.referenceStatus,
     pageSize: String(data.pagination.pageSize),
   })
+
+  useEffect(() => {
+    setFilters({
+      keyword: data.filters.keyword,
+      bucketType: data.filters.bucketType,
+      referenceStatus: data.filters.referenceStatus,
+      pageSize: String(data.pagination.pageSize),
+    })
+  }, [data])
+
   const { isPending, runMutation } = useAdminMutation()
   const activeScan = data.scan.activeScan
   const activeCleanup = data.scan.activeCleanup

@@ -12,7 +12,7 @@ import {
   Sparkles,
   TrendingUp,
 } from "lucide-react"
-import { useCallback, useMemo, useState, useTransition } from "react"
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
 
 import { AdminPostActionButton } from "@/components/admin/admin-post-action-button"
 import {
@@ -129,6 +129,21 @@ export function AdminPostList({ data }: AdminPostListProps) {
     review: data.filters.review,
     pageSize: String(data.pagination.pageSize),
   })
+
+  useEffect(() => {
+    setFilters({
+      type: data.filters.type,
+      status: data.filters.status,
+      board: data.filters.board,
+      keyword: data.filters.keyword,
+      sort: data.filters.sort,
+      pin: data.filters.pin,
+      featured: data.filters.featured,
+      announcement: data.filters.announcement,
+      review: data.filters.review,
+      pageSize: String(data.pagination.pageSize),
+    })
+  }, [data])
 
   const router = useRouter()
   const [selectedPostIdsState, setSelectedPostIds] = useState<string[]>([])

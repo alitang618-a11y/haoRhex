@@ -21,7 +21,7 @@ import {
   Sparkles,
   ThumbsUp,
 } from "lucide-react"
-import { useCallback, useMemo, useState, useTransition } from "react"
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
 
 import { AdminPostActionButton } from "@/components/admin/admin-post-action-button"
 import { Badge } from "@/components/ui/badge"
@@ -101,6 +101,19 @@ export function AdminCommentList({ data }: AdminCommentListProps) {
     god: data.filters.god,
     pageSize: String(data.pagination.pageSize),
   })
+
+  useEffect(() => {
+    setFilters({
+      keyword: data.filters.keyword,
+      status: data.filters.status,
+      board: data.filters.board,
+      sort: data.filters.sort,
+      review: data.filters.review,
+      type: data.filters.type,
+      god: data.filters.god,
+      pageSize: String(data.pagination.pageSize),
+    })
+  }, [data])
 
   const router = useRouter()
   const [selectedCommentIdsState, setSelectedCommentIds] = useState<string[]>([])

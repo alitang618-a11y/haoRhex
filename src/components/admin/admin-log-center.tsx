@@ -17,7 +17,7 @@ import {
   ReceiptText,
   ShieldCheck,
 } from "lucide-react"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
@@ -97,6 +97,16 @@ export function AdminLogCenter({ data }: AdminLogCenterProps) {
     bucketType: data.filters.bucketType,
     pageSize: String(data.pagination.pageSize),
   })
+
+  useEffect(() => {
+    setFilters({
+      keyword: data.filters.keyword,
+      action: data.filters.action,
+      changeType: data.filters.changeType,
+      bucketType: data.filters.bucketType,
+      pageSize: String(data.pagination.pageSize),
+    })
+  }, [data])
 
   const activeActionOptions = data.activeTab === "checkins" ? checkInActionOptions : actionOptions
   const actionLabel = data.activeTab === "checkins" ? "签到动作" : "管理员动作"

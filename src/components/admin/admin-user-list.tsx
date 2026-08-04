@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { ArrowRight, Filter, Loader2, ShieldCheck, Trash2, UserCog, UserRoundCheck, UserRoundX, Users, Zap } from "lucide-react"
-import { useCallback, useMemo, useState, useTransition } from "react"
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
 
 import {
   AdminFilterActions,
@@ -126,6 +126,19 @@ export function AdminUserList({ data, actorUserId, actorCanDemoteAdmins }: Admin
     sort: data.filters.sort,
     pageSize: String(data.pagination.pageSize),
   })
+
+  useEffect(() => {
+    setFilters({
+      keyword: data.filters.keyword,
+      role: data.filters.role,
+      status: data.filters.status,
+      vip: data.filters.vip,
+      activity: data.filters.activity,
+      sort: data.filters.sort,
+      pageSize: String(data.pagination.pageSize),
+    })
+  }, [data])
+
   const router = useRouter()
   const [selectedUserIdsState, setSelectedUserIds] = useState<number[]>([])
   const [bulkAction, setBulkAction] = useState<AdminUserBulkAction>("setRole")

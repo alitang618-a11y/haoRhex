@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useMemo, useState, useTransition } from "react"
+import { useEffect, useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import {
   AlertCircle,
@@ -87,6 +87,10 @@ export function StructureManager({
 }: StructureManagerProps) {
   const [modal, setModal] = useState<ModalMode>(null)
   const [filters, setFilters] = useState(initialFilters)
+
+  useEffect(() => {
+    setFilters(initialFilters)
+  }, [initialFilters])
   const [selectedZoneId, setSelectedZoneId] = useState(
     initialFilters.zoneId || zones[0]?.id || "",
   )

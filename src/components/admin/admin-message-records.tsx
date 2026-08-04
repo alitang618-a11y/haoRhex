@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { Filter, Inbox, MailOpen, MessageSquare, RotateCcw, Trash2, Users } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 
 import {
   AdminFilterActions,
@@ -55,6 +55,16 @@ export function AdminMessageRecords({ data }: AdminMessageRecordsProps) {
     pageSize: String(data.pagination.pageSize),
     detailPageSize: String(data.filters.detailPageSize),
   })
+
+  useEffect(() => {
+    setFilters({
+      keyword: data.filters.keyword,
+      sort: data.filters.sort,
+      pageSize: String(data.pagination.pageSize),
+      detailPageSize: String(data.filters.detailPageSize),
+    })
+  }, [data])
+
   const [isDeletingReadSystemNotifications, setIsDeletingReadSystemNotifications] = useState(false)
   const [deleteReadSystemNotificationsMessage, setDeleteReadSystemNotificationsMessage] = useState("")
 

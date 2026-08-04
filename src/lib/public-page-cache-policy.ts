@@ -36,8 +36,8 @@ const PUBLIC_PAGE_CACHE_QUERY_KEYS = new Set(["page", "sort", "source", "view"])
 
 export const PUBLIC_PAGE_CACHE_RENDER_HEADER = "x-rhex-public-cache-render"
 export const PUBLIC_PAGE_CACHE_TARGET_HEADER = "x-rhex-public-cache-target"
-export const PUBLIC_PAGE_CACHE_TTL_SECONDS = 30
-export const PUBLIC_PAGE_CACHE_STALE_SECONDS = 5 * 60
+export const PUBLIC_PAGE_CACHE_TTL_SECONDS = 60
+export const PUBLIC_PAGE_CACHE_STALE_SECONDS = 30 * 60
 
 interface PublicPageCacheRequestContext {
   hasAuthorization: boolean

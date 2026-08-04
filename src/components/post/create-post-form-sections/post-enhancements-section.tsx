@@ -653,7 +653,7 @@ export function PostEnhancementsSection({
                   summary={coverSummary}
                   active={Boolean(coverPath.trim())}
                   onClick={openMobilePanelAction(actions.onOpenCoverModal)}
-                  onCoverClear={actions.onCoverClear}
+                  onClear={actions.onCoverClear}
                 />
 
                 <DesktopToggleCard

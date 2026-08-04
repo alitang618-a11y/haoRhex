@@ -16,6 +16,7 @@ import {
   PUBLIC_PAGE_CACHE_TARGET_HEADER,
   PUBLIC_PAGE_CACHE_TTL_SECONDS,
 } from "@/lib/public-page-cache-policy"
+import { ensurePublicPageCacheWarmLoop } from "@/lib/public-page-cache-warm"
 
 export const dynamic = "force-dynamic"
 
@@ -53,9 +54,29 @@ function getCacheIdentity(request: Request, target: string) {
   return `${host}\n${target}`
 }
 
-async function renderTarget(request: Request, target: string) {
+function applyCacheHeaders(response: Response, cacheStatus: string) {
+  response.headers.set(
+    "Cache-Control",
+    `public, s-maxage=${PUBLIC_PAGE_CACHE_TTL_SECONDS}, stale-while-revalidate=${PUBLIC_PAGE_CACHE_STALE_SECONDS}`,
+  )
+  response.headers.set("X-Rhex-Cache", cacheStatus)
+  return response
+}
+
+function passthroughHeaders(upstream: Response) {
+  const headers = new Headers(upstream.headers)
+  headers.delete("content-length")
+  headers.delete("content-encoding")
+  headers.delete("transfer-encoding")
+  headers.delete("connection")
+  headers.delete("keep-alive")
+  return headers
+}
+
+async function renderTargetStream(request: Request, target: string) {
   const headers = new Headers()
   headers.set("Accept", "text/html")
+  headers.set("Accept-Encoding", "identity")
   headers.set("User-Agent", "Mozilla/5.0 (compatible; RhexPublicPageCache/1.0)")
   headers.set(PUBLIC_PAGE_CACHE_RENDER_HEADER, "1")
 
@@ -64,32 +85,81 @@ async function renderTarget(request: Request, target: string) {
     headers.set("Accept-Language", acceptLanguage)
   }
 
-  const response = await fetch(new URL(target, getInternalOrigin()), {
+  const upstream = await fetch(new URL(target, getInternalOrigin()), {
     method: "GET",
     headers,
     cache: "no-store",
     redirect: "manual",
   })
-  const body = await response.text()
-  const responseHeaders: Record<string, string> = {}
 
+  const responseHeaders: Record<string, string> = {}
   for (const name of CACHEABLE_RESPONSE_HEADERS) {
-    const value = response.headers.get(name)
+    const value = upstream.headers.get(name)
     if (value) {
       responseHeaders[name] = value
     }
   }
 
-  return {
-    entry: {
-      body,
-      headers: responseHeaders,
-      status: response.status,
-      storedAt: Date.now(),
-    } satisfies PublicPageCacheEntry,
-    cacheable: response.status === 200
-      && response.headers.get("content-type")?.toLowerCase().includes("text/html") === true,
+  const cacheable = upstream.status === 200
+    && upstream.headers.get("content-type")?.toLowerCase().includes("text/html") === true
+
+  if (!upstream.body || request.method === "HEAD" || !cacheable) {
+    const bodyText = upstream.body ? await upstream.text() : ""
+    return {
+      response: new Response(request.method === "HEAD" || !bodyText ? null : bodyText, {
+        status: upstream.status,
+        headers: passthroughHeaders(upstream),
+      }),
+      entryPromise: Promise.resolve<PublicPageCacheEntry | null>(bodyText
+        ? {
+          body: bodyText,
+          headers: responseHeaders,
+          status: upstream.status,
+          storedAt: Date.now(),
+        }
+        : null),
+      cacheable,
+    }
   }
+
+  const [browserStream, cacheStream] = upstream.body.tee()
+  const entryPromise = (async (): Promise<PublicPageCacheEntry | null> => {
+    const chunks: Uint8Array[] = []
+    const reader = cacheStream.getReader()
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) {
+          break
+        }
+        chunks.push(value)
+      }
+      return {
+        body: Buffer.concat(chunks).toString("utf8"),
+        headers: responseHeaders,
+        status: upstream.status,
+        storedAt: Date.now(),
+      }
+    } catch {
+      return null
+    } finally {
+      reader.releaseLock()
+    }
+  })()
+
+  return {
+    response: new Response(browserStream, {
+      status: upstream.status,
+      headers: passthroughHeaders(upstream),
+    }),
+    entryPromise,
+    cacheable,
+  }
+}
+
+async function streamBypassResponse(request: Request, target: string) {
+  const rendered = await renderTargetStream(request, target)
+  return applyCacheHeaders(rendered.response, "BYPASS")
 }
 
 async function waitForColdCache(generation: string, target: string) {
@@ -114,9 +184,10 @@ async function handle(request: Request) {
   }
 
   if (!isPublicPageCacheAvailable()) {
-    const rendered = await renderTarget(request, target)
-    return buildResponse(rendered.entry, request.method, "BYPASS")
+    return streamBypassResponse(request, target)
   }
+
+  ensurePublicPageCacheWarmLoop()
 
   try {
     const generation = await getPublicPageCacheGeneration(target)
@@ -138,16 +209,16 @@ async function handle(request: Request) {
         return buildResponse(filled, request.method, "HIT")
       }
 
-      const rendered = await renderTarget(request, target)
-      return buildResponse(rendered.entry, request.method, "BYPASS")
+      return streamBypassResponse(request, target)
     }
 
     if (cached) {
       after(async () => {
         try {
-          const rendered = await renderTarget(request, target)
-          if (rendered.cacheable) {
-            await writePublicPageCacheEntry(generation, cacheIdentity, rendered.entry)
+          const rendered = await renderTargetStream(request, target)
+          const entry = await rendered.entryPromise
+          if (rendered.cacheable && entry) {
+            await writePublicPageCacheEntry(generation, cacheIdentity, entry)
           }
         } catch (error) {
           console.error("[public-page-cache] background refresh failed", error)
@@ -158,20 +229,27 @@ async function handle(request: Request) {
       return buildResponse(cached, request.method, "STALE")
     }
 
-    try {
-      const renderedResult = await renderTarget(request, target)
-      if (renderedResult.cacheable) {
-        await writePublicPageCacheEntry(generation, cacheIdentity, renderedResult.entry)
-      }
-      const rendered = renderedResult.entry
-      return buildResponse(rendered, request.method, "MISS")
-    } finally {
+    const renderedResult = await renderTargetStream(request, target)
+    if (renderedResult.cacheable) {
+      after(async () => {
+        try {
+          const entry = await renderedResult.entryPromise
+          if (entry) {
+            await writePublicPageCacheEntry(generation, cacheIdentity, entry)
+          }
+        } catch (error) {
+          console.error("[public-page-cache] cache write failed", error)
+        } finally {
+          await lease.release().catch(() => false)
+        }
+      })
+    } else {
       await lease.release().catch(() => false)
     }
+    return applyCacheHeaders(renderedResult.response, "MISS")
   } catch (error) {
     console.error("[public-page-cache] request failed", error)
-    const rendered = await renderTarget(request, target)
-    return buildResponse(rendered.entry, request.method, "BYPASS")
+    return streamBypassResponse(request, target)
   }
 }
 
