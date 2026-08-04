@@ -19,7 +19,8 @@ const PATH_HOME_FEED_SORTS: Record<string, HomeFeedSort> = {
   "/hot": "hot",
 }
 
-const FORUM_DOCUMENT_CACHE_CONTROL = "private, no-cache, max-age=0, must-revalidate"
+// 修复：去掉 no-cache 和 max-age=0，避免强制全量重绘导致闪烁
+const FORUM_DOCUMENT_CACHE_CONTROL = "private, max-age=30, must-revalidate"
 
 function isDocumentRequest(request: NextRequest) {
   if (request.method !== "GET" && request.method !== "HEAD") {
@@ -122,8 +123,6 @@ export async function proxy(request: NextRequest) {
   if (legacyHomeFeedRedirect) {
     return legacyHomeFeedRedirect
   }
-
-  
 
   const token = request.cookies.get(getSessionCookieName())?.value
   const protectedPath = isProtectedPath(request.nextUrl.pathname)
