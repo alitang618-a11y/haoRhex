@@ -123,10 +123,7 @@ export async function proxy(request: NextRequest) {
     return legacyHomeFeedRedirect
   }
 
-  const publicPageCacheTarget = getAnonymousPublicPageCacheTarget(request)
-  if (publicPageCacheTarget) {
-    return rewriteToAnonymousPublicPageCache(request, publicPageCacheTarget)
-  }
+  
 
   const token = request.cookies.get(getSessionCookieName())?.value
   const protectedPath = isProtectedPath(request.nextUrl.pathname)
