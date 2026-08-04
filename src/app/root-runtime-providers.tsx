@@ -14,7 +14,7 @@ import { RootBootstrap } from "@/components/root-bootstrap"
 import { SiteFooter } from "@/components/site-footer"
 import { SiteSettingsProvider } from "@/components/site-settings-provider"
 import { ThemeProvider } from "@/components/theme-provider"
-import { TouchNativeNavigation } from "@/components/touch-native-navigation"
+
 import { TooltipProvider } from "@/components/ui/tooltip"
 import {
   listAddonEditorProviderDescriptors,
@@ -110,7 +110,7 @@ export async function RootRuntimeProviders({ children }: { children: React.React
       {vipNameColorCss ? <style dangerouslySetInnerHTML={{ __html: vipNameColorCss }} /> : null}
       <RhexGlobalSdkBootstrap session={rhexSession} site={rhexSite} />
       <RootBootstrap />
-      <TouchNativeNavigation />
+      
       <NavigationStaleRefresh />
       <Suspense fallback={null}>
         <GlobalLayoutAddonSlotsBoundary />
